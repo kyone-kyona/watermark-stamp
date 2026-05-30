@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Watermark">
+<meta name="theme-color" content="#f5f4f0" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1917" media="(prefers-color-scheme: dark)">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.png">
+<title>Watermark Stamp</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #f5f4f0; --surface: #fff; --surface2: #f0efe9;
+  --border: rgba(0,0,0,0.12); --border2: rgba(0,0,0,0.22);
+  --text: #1a1917; --text2: #6b6a66; --text3: #9e9d99;
+  --accent: #1a1917; --accent-fg: #fff; --green: #34c759;
+  --warn-bg: #faeeda; --warn-fg: #854f0b;
+  --ok-bg: #eaf3de; --ok-fg: #3b6d11;
+  --r: 12px; --rs: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1917; --surface: #242320; --surface2: #2e2d29;
+    --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+    --text: #f0efe9; --text2: #9e9d99; --text3: #6b6a66;
+    --accent: #f0efe9; --accent-fg: #1a1917;
+    --warn-bg: #412402; --warn-fg: #fac775;
+    --ok-bg: #173404; --ok-fg: #c0dd97;
+  }
+}
+body { font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 16px 16px 60px; }
+h1 { font-size: 20px; font-weight: 700; margin-bottom: 2px; }
+.sub { font-size: 13px; color: var(--text2); margin-bottom: 20px; }
+
+.pick-wrap { margin-bottom: 16px; }
+.pick-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; padding: 32px 16px;
+  background: var(--surface); border: 2px dashed var(--border2); border-radius: var(--r);
+  cursor: pointer; text-align: center; color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+}
+.pick-btn:active { background: var(--surface2); }
+.pick-btn .icon { font-size: 38px; line-height: 1; }
+.pick-btn .ttl  { font-size: 16px; font-weight: 600; }
+.pick-btn .hint { font-size: 13px; color: var(--text2); }
+
+/* KEY FIX: input must be visible to the browser engine.
+   opacity:0 + pointer-events:none lets the label activate it
+   while keeping it invisible. Do NOT use display:none / visibility:hidden. */
+#file-input {
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  width: 0; height: 0;
+}
+
+#status-bar { display:none; font-size:13px; padding:8px 12px; border-radius:var(--rs); margin-bottom:12px; }
+#status-bar.loading { background:var(--warn-bg); color:var(--warn-fg); }
+#status-bar.error   { background:#fcebeb; color:#a32d2d; }
+
+#canvas-wrap { text-align: center; margin-bottom: 16px; }
+canvas { max-width: 100%; border-radius: var(--rs); border: 0.5px solid var(--border); display: none; }
+
+.card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--r); padding: 16px; margin-bottom: 12px; }
+.stitle { font-size: 11px; font-weight: 700; color: var(--text2); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 14px; }
+.fl { font-size: 13px; color: var(--text2); display: block; margin-bottom: 5px; }
+
+input[type=text] { width:100%; padding:10px 12px; font-size:15px; border:0.5px solid var(--border2); border-radius:var(--rs); background:var(--surface2); color:var(--text); margin-bottom:12px; outline:none; -webkit-appearance:none; }
+input[type=range] { width:100%; margin-bottom:12px; accent-color:var(--accent); }
+select { width:100%; padding:10px 12px; font-size:14px; border:0.5px solid var(--border2); border-radius:var(--rs); background:var(--surface2); color:var(--text); margin-bottom:12px; outline:none; -webkit-appearance:none; }
+input[type=color] { width:44px; height:34px; border:0.5px solid var(--border2); border-radius:var(--rs); padding:2px; background:var(--surface2); cursor:pointer; }
+
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.row { display:flex; gap:12px; align-items:flex-end; }
+.row > * { flex:1; }
+.lrow { display:flex; justify-content:space-between; align-items:center; margin-bottom:5px; }
+.vbadge { font-size:12px; color:var(--text3); }
+
+.trow { display:flex; align-items:center; justify-content:space-between; padding:10px 0; border-bottom:0.5px solid var(--border); }
+.trow:last-child { border-bottom:none; padding-bottom:0; }
+.trow:first-child { padding-top:0; }
+.tl { font-size:15px; font-weight:500; }
+.ts { font-size:12px; color:var(--text2); margin-top:2px; }
+
+.sw { position:relative; width:48px; height:28px; flex-shrink:0; }
+.sw input { opacity:0; width:0; height:0; }
+.sl { position:absolute; inset:0; background:var(--border2); border-radius:28px; cursor:pointer; transition:background .2s; }
+.sl::before { content:''; position:absolute; width:22px; height:22px; left:3px; top:3px; background:#fff; border-radius:50%; transition:transform .2s; box-shadow:0 1px 4px rgba(0,0,0,.25); }
+input:checked + .sl { background:var(--green); }
+input:checked + .sl::before { transform:translateX(20px); }
+
+.pgrid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; margin-bottom:12px; }
+.pb { padding:9px 4px; font-size:12px; border:0.5px solid var(--border); border-radius:var(--rs); background:var(--surface2); cursor:pointer; text-align:center; color:var(--text2); -webkit-tap-highlight-color:transparent; }
+.pb.active { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); }
+
+.sbox { font-size:13px; padding:8px 12px; border-radius:var(--rs); margin-top:10px; line-height:1.5; }
+.sbox.warn { background:var(--warn-bg); color:var(--warn-fg); }
+.sbox.ok   { background:var(--ok-bg);   color:var(--ok-fg); }
+
+.prev-box { background:var(--surface2); border-radius:var(--rs); padding:10px 12px; font-size:12px; color:var(--text2); font-family:monospace; line-height:1.7; margin-top:4px; word-break:break-all; }
+
+#save-section { display:none; margin-top:4px; }
+#save-btn { width:100%; padding:14px; font-size:16px; font-weight:700; cursor:pointer; border-radius:var(--r); border:none; background:var(--accent); color:var(--accent-fg); -webkit-tap-highlight-color:transparent; }
+#save-btn:active { opacity:0.75; }
+#img-out-wrap { display:none; margin-top:16px; background:var(--surface); border-radius:var(--r); padding:16px; border:0.5px solid var(--border); text-align:center; }
+#img-out-wrap p { font-size:14px; color:var(--text2); margin-bottom:12px; line-height:1.5; }
+#img-out { max-width:100%; border-radius:var(--rs); }
+</style>
+</head>
+<body>
+
+<h1>📷 Watermark Stamp</h1>
+<p class="sub">Add date, time & location to your photos</p>
+
+<div class="pick-wrap">
+  <label class="pick-btn" for="file-input">
+    <span class="icon">🖼️</span>
+    <span class="ttl" id="pick-ttl">Tap to choose a photo</span>
+    <span class="hint">Camera Roll · Files · Camera</span>
+  </label>
+  <input type="file" id="file-input" accept="image/*">
+</div>
+
+<div id="status-bar"></div>
+<div id="canvas-wrap"><canvas id="canvas"></canvas></div>
+
+<div class="card" id="content-card" style="display:none">
+  <div class="stitle">Watermark content</div>
+  <div class="trow">
+    <div><div class="tl">📅 Date</div><div class="ts" id="date-prev">—</div></div>
+    <label class="sw"><input type="checkbox" id="show-date" checked onchange="render()"><span class="sl"></span></label>
+  </div>
+  <div class="trow">
+    <div><div class="tl">🕐 Time</div><div class="ts" id="time-prev">—</div></div>
+    <label class="sw"><input type="checkbox" id="show-time" checked onchange="render()"><span class="sl"></span></label>
+  </div>
+  <div class="trow">
+    <div><div class="tl">📍 Location</div><div class="ts" id="loc-sub">Toggle to add</div></div>
+    <label class="sw"><input type="checkbox" id="show-loc" onchange="toggleLoc()"><span class="sl"></span></label>
+  </div>
+  <div id="loc-area" style="display:none; margin-top:12px">
+    <div class="sbox warn" id="loc-status">Type your location, or GPS will try automatically.</div>
+    <div style="margin-top:8px">
+      <label class="fl">Location text</label>
+      <input type="text" id="loc-manual" placeholder="e.g. Tokyo, Japan" oninput="onManualLoc()">
+    </div>
+  </div>
+  <div style="margin-top:4px">
+    <label class="fl">Custom text (optional)</label>
+    <input type="text" id="custom-prefix" placeholder="e.g. © Your Name">
+  </div>
+  <div id="prev-wrap" style="display:none">
+    <label class="fl">Preview</label>
+    <div class="prev-box" id="wm-prev"></div>
+  </div>
+</div>
+
+<div class="card" id="style-card" style="display:none">
+  <div class="stitle">Style</div>
+  <div class="grid2">
+    <div>
+      <div class="lrow"><span class="fl" style="margin:0">Font size</span><span class="vbadge" id="sz-v">50px</span></div>
+      <input type="range" id="font-size" min="8" max="120" value="50" oninput="document.getElementById('sz-v').textContent=this.value+'px';render()">
+    </div>
+    <div>
+      <div class="lrow"><span class="fl" style="margin:0">Opacity</span><span class="vbadge" id="op-v">70%</span></div>
+      <input type="range" id="opacity" min="5" max="100" value="70" oninput="document.getElementById('op-v').textContent=this.value+'%';render()">
+    </div>
+  </div>
+  <div class="row" style="margin-bottom:12px">
+    <div><label class="fl">Color</label><input type="color" id="wm-color" value="#ffffff" onchange="render()"></div>
+    <div><label class="fl">Font</label>
+      <select id="font-fam" onchange="render()">
+        <option value="sans-serif">Sans-serif</option>
+        <option value="serif">Serif</option>
+        <option value="monospace">Monospace</option>
+        <option value="cursive">Cursive</option>
+      </select>
+    </div>
+  </div>
+  <div class="grid2">
+    <div><label class="fl">Background</label>
+      <select id="bg-style" onchange="render()">
+        <option value="dark" selected>Dark pill</option>
+        <option value="light">Light pill</option>
+        <option value="semi">Semi-transparent</option>
+        <option value="none">None</option>
+      </select>
+    </div>
+    <div><label class="fl">Layout</label>
+      <select id="layout" onchange="render()">
+        <option value="stacked">Stacked</option>
+        <option value="inline">Single line</option>
+      </select>
+    </div>
+  </div>
+  <label class="fl">Blend mode</label>
+  <select id="blend" onchange="render()">
+    <option value="normal">Normal</option>
+    <option value="multiply">Multiply</option>
+    <option value="screen">Screen</option>
+    <option value="overlay">Overlay</option>
+  </select>
+  <label class="fl">Position</label>
+  <div class="pgrid">
+    <button class="pb" data-pos="top-left">↖ Top L</button>
+    <button class="pb" data-pos="top-center">↑ Top C</button>
+    <button class="pb" data-pos="top-right">↗ Top R</button>
+    <button class="pb" data-pos="middle-left">← Mid L</button>
+    <button class="pb" data-pos="center">⊙ Center</button>
+    <button class="pb" data-pos="middle-right">→ Mid R</button>
+    <button class="pb" data-pos="bottom-left">↙ Bot L</button>
+    <button class="pb" data-pos="bottom-center">↓ Bot C</button>
+    <button class="pb active" data-pos="bottom-right">↘ Bot R</button>
+  </div>
+  <div class="lrow"><span class="fl" style="margin:0">Margin</span><span class="vbadge" id="mg-v">20px</span></div>
+  <input type="range" id="margin" min="0" max="120" value="20" oninput="document.getElementById('mg-v').textContent=this.value+'px';render()">
+</div>
+
+<div id="save-section">
+  <button id="save-btn" onclick="showSaved()">📥 Save watermarked photo</button>
+  <div id="img-out-wrap">
+    <p>⬇️ <strong>Hold the image below</strong> then tap <strong>"Save to Photos"</strong></p>
+    <img id="img-out" alt="Watermarked photo">
+  </div>
+</div>
+
+<script>
+var img = null, pos = 'bottom-right', locAddr = null, locCoords = null, objUrl = null;
+var canvas = document.getElementById('canvas');
+var ctx = canvas.getContext('2d');
+
+/* clock */
+function getDateTime() {
+  var n = new Date();
+  var date = n.toLocaleDateString(undefined,{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+  var time = n.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false});
+  return { combined: '📅 '+date+' | 🕐 '+time, date: '📅 '+date, time: '🕐 '+time };
+}
+function tick() {
+  var t=getDateTime();
+  document.getElementById('date-prev').textContent=t.date;
+  document.getElementById('time-prev').textContent=t.time;
+}
+tick(); setInterval(function(){ tick(); if(img) render(); }, 1000);
+
+document.getElementById('custom-prefix').addEventListener('input', render);
+
+/* ── FILE INPUT ──
+   Use createObjectURL — avoids FileReader base64 which can silently fail
+   on large images under file:// in mobile Safari.
+   Always revoke the previous URL to avoid memory leaks. */
+document.getElementById('file-input').addEventListener('change', function(e) {
+  var file = e.target.files && e.target.files[0];
+  if (!file) return;
+
+  showStatus('loading', '⏳ Loading image…');
+
+  // revoke old object URL
+  if (objUrl) { URL.revokeObjectURL(objUrl); objUrl = null; }
+
+  var newImg = new Image();
+
+  newImg.onload = function() {
+    img = newImg;
+    // don't revoke yet — canvas needs the image to stay loaded
+    canvas.style.display = 'block';
+    document.getElementById('content-card').style.display = 'block';
+    document.getElementById('style-card').style.display = 'block';
+    document.getElementById('save-section').style.display = 'block';
+    document.getElementById('img-out-wrap').style.display = 'none';
+    document.getElementById('pick-ttl').textContent = '✅ ' + file.name;
+    hideStatus();
+    render();
+  };
+
+  newImg.onerror = function() {
+    showStatus('error', '❌ Could not load image. Try a different file.');
+  };
+
+  // createObjectURL works reliably on file:// for local files
+  objUrl = URL.createObjectURL(file);
+  newImg.src = objUrl;
+});
+
+function showStatus(type, msg) {
+  var el = document.getElementById('status-bar');
+  el.className = type; el.textContent = msg; el.style.display = 'block';
+}
+function hideStatus() {
+  document.getElementById('status-bar').style.display = 'none';
+}
+
+/* position buttons */
+document.querySelectorAll('.pb').forEach(function(b) {
+  b.addEventListener('click', function() {
+    document.querySelectorAll('.pb').forEach(function(x){ x.classList.remove('active'); });
+    b.classList.add('active'); pos = b.dataset.pos; render();
+  });
+});
+
+/* location */
+function toggleLoc() {
+  var on = document.getElementById('show-loc').checked;
+  document.getElementById('loc-area').style.display = on ? 'block' : 'none';
+  if (!on) { locAddr = null; locCoords = null; render(); return; }
+  if (navigator.geolocation && window.location.protocol !== 'file:') {
+    setLS('warn','⏳ Getting GPS…');
+    navigator.geolocation.getCurrentPosition(function(p) {
+      var la=p.coords.latitude, lo=p.coords.longitude;
+      locCoords=la.toFixed(5)+'°N, '+lo.toFixed(5)+'°E';
+      fetch('https://nominatim.openstreetmap.org/reverse?lat='+la+'&lon='+lo+'&format=json')
+        .then(function(r){ return r.json(); })
+        .then(function(d) {
+          var a=d.address;
+          var pts=[a.suburb||a.neighbourhood||a.village||a.town,a.city||a.county,a.country].filter(Boolean);
+          locAddr=pts.slice(0,3).join(', ');
+          document.getElementById('loc-manual').value=locAddr;
+          document.getElementById('loc-sub').textContent=locAddr;
+          setLS('ok','✅ '+locAddr+' · '+locCoords); render();
+        }).catch(function(){
+          locAddr=null;
+          document.getElementById('loc-manual').value=locCoords;
+          setLS('ok','✅ '+locCoords); render();
+        });
+    }, function(){ setLS('warn','⚠️ GPS denied — type location below.'); },
+    {enableHighAccuracy:true,timeout:10000});
+  } else {
+    setLS('warn','⚠️ GPS needs HTTPS. Type your location below.');
+  }
+}
+function setLS(t,m){ var e=document.getElementById('loc-status'); e.className='sbox '+t; e.textContent=m; }
+function onManualLoc() {
+  var v=document.getElementById('loc-manual').value.trim();
+  locAddr=v||null; locCoords=null;
+  if(v){ document.getElementById('loc-sub').textContent=v; setLS('ok','✅ '+v); }
+  render();
+}
+
+/* render */
+function buildLines() {
+  var t=getDateTime(), parts=[];
+  var pfx=document.getElementById('custom-prefix').value.trim();
+  if(pfx) parts.push(pfx);
+
+  // Date + time on one line: "Sat, 30 May 2026 | 19:17"
+  var sd=document.getElementById('show-date').checked;
+  var st=document.getElementById('show-time').checked;
+  if(sd && st) parts.push(t.combined);
+  else if(sd)  parts.push(t.date);
+  else if(st)  parts.push(t.time);
+
+  // Location: address on one line, coords on next
+  if(document.getElementById('show-loc').checked) {
+    if(locAddr)   parts.push('📍 '+locAddr);
+    if(locCoords) parts.push('🌐 '+locCoords);
+    if(!locAddr && !locCoords) parts.push('📍 —');
+  }
+
+  if(!parts.length) parts=['Watermark'];
+  var lines=document.getElementById('layout').value==='inline'?[parts.join('  •  ')]:parts;
+  document.getElementById('prev-wrap').style.display='block';
+  document.getElementById('wm-prev').textContent=lines.join('\n');
+  return lines;
+}
+
+function render() {
+  if(!img) return;
+  canvas.width=img.naturalWidth||img.width;
+  canvas.height=img.naturalHeight||img.height;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.drawImage(img,0,0);
+
+  var lines=buildLines();
+  var fs=parseInt(document.getElementById('font-size').value);
+  var alpha=parseInt(document.getElementById('opacity').value)/100;
+  var color=document.getElementById('wm-color').value;
+  var ff=document.getElementById('font-fam').value;
+  var blend=document.getElementById('blend').value;
+  var mg=parseInt(document.getElementById('margin').value);
+  var bg=document.getElementById('bg-style').value;
+  var lh=fs*1.5, th=lines.length*lh;
+
+  ctx.font=fs+'px '+ff;
+  var mw=0;
+  for(var i=0;i<lines.length;i++){ var w=ctx.measureText(lines[i]).width; if(w>mw) mw=w; }
+  var px=fs*.65, py=fs*.45;
+
+  var ax,ay;
+  if(pos.indexOf('left')>-1) ax=mg;
+  else if(pos.indexOf('right')>-1) ax=canvas.width-mw-mg;
+  else ax=(canvas.width-mw)/2;
+  if(pos.indexOf('top')>-1) ay=mg;
+  else if(pos.indexOf('bottom')>-1) ay=canvas.height-th-mg;
+  else ay=(canvas.height-th)/2;
+
+  ctx.globalAlpha=alpha; ctx.globalCompositeOperation=blend;
+  if(bg!=='none'){
+    ctx.fillStyle=bg==='dark'?'rgba(0,0,0,.62)':bg==='light'?'rgba(255,255,255,.62)':'rgba(0,0,0,.38)';
+    var rx=fs*.4,bx=ax-px,by=ay-py,bw=mw+px*2,bh=th+py*2;
+    ctx.beginPath();
+    ctx.moveTo(bx+rx,by); ctx.lineTo(bx+bw-rx,by); ctx.quadraticCurveTo(bx+bw,by,bx+bw,by+rx);
+    ctx.lineTo(bx+bw,by+bh-rx); ctx.quadraticCurveTo(bx+bw,by+bh,bx+bw-rx,by+bh);
+    ctx.lineTo(bx+rx,by+bh); ctx.quadraticCurveTo(bx,by+bh,bx,by+bh-rx);
+    ctx.lineTo(bx,by+rx); ctx.quadraticCurveTo(bx,by,bx+rx,by);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.fillStyle=color; ctx.textBaseline='top'; ctx.textAlign='left';
+  for(var j=0;j<lines.length;j++) ctx.fillText(lines[j],ax,ay+j*lh);
+  ctx.globalAlpha=1; ctx.globalCompositeOperation='source-over';
+}
+
+/* save */
+function showSaved() {
+  if(!img) return;
+  render();
+  var dataUrl=canvas.toDataURL('image/jpeg',0.95);
+  document.getElementById('img-out').src=dataUrl;
+  var wrap=document.getElementById('img-out-wrap');
+  wrap.style.display='block';
+  setTimeout(function(){ wrap.scrollIntoView({behavior:'smooth',block:'center'}); },100);
+}
+</script>
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function() {
+    navigator.serviceWorker.register('sw.js').catch(function(e){ console.log('SW error:', e); });
+  });
+}
+</script>
+</body>
+</html>

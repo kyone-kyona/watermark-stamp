@@ -1,0 +1,19 @@
+{
+  "name": "Watermark Stamp",
+  "short_name": "Watermark",
+  "description": "Stamp date, time and location onto your photos",
+  "start_url": "/Watermark/",
+  "scope": "/Watermark/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f4f0",
+  "theme_color": "#1a1917",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
